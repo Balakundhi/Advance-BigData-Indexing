@@ -24,63 +24,52 @@ public class PlanController {
     public PlanController(PlanService planService) {
         this.planService = planService;
 
-        // Inline JSON Schema
+        // Inline our new "Fitness Plan" JSON Schema
         String schemaString = """
         {
           "$schema": "http://json-schema.org/draft-07/schema#",
           "type": "object",
           "properties": {
-            "planCostShares": {
-              "type": "object",
-              "properties": {
-                "deductible": { "type": "number" },
-                "_org":       { "type": "string" },
-                "copay":      { "type": "number" },
-                "objectId":   { "type": "string" },
-                "objectType": { "type": "string" }
-              },
-              "required": ["deductible", "_org", "copay", "objectId", "objectType"]
+            "planId": {
+              "type": "string"
             },
-            "linkedPlanServices": {
+            "planName": {
+              "type": "string"
+            },
+            "exercises": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "linkedService": {
-                    "type": "object",
-                    "properties": {
-                      "_org":       { "type": "string" },
-                      "objectId":   { "type": "string" },
-                      "objectType": { "type": "string" },
-                      "name":       { "type": "string" }
-                    },
-                    "required": ["_org", "objectId", "objectType", "name"]
+                  "exerciseName": {
+                    "type": "string"
                   },
-                  "planserviceCostShares": {
-                    "type": "object",
-                    "properties": {
-                      "deductible": { "type": "number" },
-                      "_org":       { "type": "string" },
-                      "copay":      { "type": "number" },
-                      "objectId":   { "type": "string" },
-                      "objectType": { "type": "string" }
-                    },
-                    "required": ["deductible", "_org", "copay", "objectId", "objectType"]
+                  "durationMins": {
+                    "type": "number"
                   },
-                  "_org":       { "type": "string" },
-                  "objectId":   { "type": "string" },
-                  "objectType": { "type": "string" }
+                  "caloriesBurned": {
+                    "type": "number"
+                  }
                 },
-                "required": ["linkedService", "planserviceCostShares", "_org", "objectId", "objectType"]
+                "required": ["exerciseName", "durationMins", "caloriesBurned"],
+                "additionalProperties": false
               }
             },
-            "_org":       { "type": "string" },
-            "objectId":   { "type": "string" },
-            "objectType": { "type": "string" },
-            "planStatus": { "type": "string" },
-            "creationDate": { "type": "string" }
+            "createdBy": {
+              "type": "string"
+            },
+            "creationDate": {
+              "type": "string"
+            }
           },
-          "required": ["planCostShares", "linkedPlanServices", "_org", "objectId", "objectType", "planStatus", "creationDate"]
+          "required": [
+            "planId",
+            "planName",
+            "exercises",
+            "createdBy",
+            "creationDate"
+          ],
+          "additionalProperties": false
         }
         """;
 
@@ -94,58 +83,58 @@ public class PlanController {
     // -------------------------
     @PostMapping
     public ResponseEntity<?> createPlan(@RequestBody String planJson) {
-        // 1. Validate JSON
+        // 1. Validate JSON against the new fitness schema
         try {
             JSONObject jsonObject = new JSONObject(planJson);
-            jsonSchema.validate(jsonObject);
+            jsonSchema.validate(jsonObject); // throws exception if invalid
         } catch (Exception e) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body("Invalid request body: " + e.getMessage());
         }
 
-        // 2. Extract objectId
+        // 2. Extract planId
         JSONObject jsonObject = new JSONObject(planJson);
-        String objectId = jsonObject.optString("objectId", null);
-        if (objectId == null || objectId.isBlank()) {
+        String planId = jsonObject.optString("planId", null);
+        if (planId == null || planId.isBlank()) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
-                    .body("Missing or empty 'objectId'.");
+                    .body("Missing or empty 'planId'.");
         }
 
-        // 3. Check if plan with this objectId already exists
-        if (planService.exists(objectId)) {
+        // 3. Check if plan with this planId already exists
+        if (planService.exists(planId)) {
             return ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body("Plan with this objectId already exists.");
+                    .body("Plan with this planId already exists.");
         }
 
         // 4. Save in memory
-        planService.save(objectId, planJson);
+        planService.save(planId, planJson);
 
         // 5. Return 201 Created
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body("Plan successfully created. objectId = " + objectId);
+                .body("Fitness plan successfully created. planId = " + planId);
     }
 
     // -------------------------
     //  READ (GET)
     // -------------------------
-    @GetMapping("/{objectId}")
+    @GetMapping("/{planId}")
     public ResponseEntity<?> getPlan(
-            @PathVariable String objectId,
+            @PathVariable String planId,
             @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch
     ) {
         // 1. Fetch
-        String planJson = planService.get(objectId);
+        String planJson = planService.get(planId);
         if (planJson == null) {
             return ResponseEntity
                     .status(HttpStatus.NOT_FOUND)
                     .body("Plan not found");
         }
 
-        // 2. Generate ETag
+        // 2. Generate ETag (MD5 hash)
         String eTag = generateETag(planJson);
 
         // 3. Compare with If-None-Match
@@ -163,18 +152,18 @@ public class PlanController {
     // -------------------------
     //  DELETE
     // -------------------------
-    @DeleteMapping("/{objectId}")
-    public ResponseEntity<?> deletePlan(@PathVariable String objectId) {
-        if (!planService.exists(objectId)) {
+    @DeleteMapping("/{planId}")
+    public ResponseEntity<?> deletePlan(@PathVariable String planId) {
+        if (!planService.exists(planId)) {
             return ResponseEntity
                     .status(HttpStatus.NOT_FOUND)
                     .body("Plan not found");
         }
-        planService.delete(objectId);
-        return ResponseEntity.noContent().build();
+        planService.delete(planId);
+        return ResponseEntity.noContent().build(); // 204
     }
 
-    // Helper: generate MD5 ETag
+    // Helper for ETag generation
     private String generateETag(String content) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
