@@ -1,28 +1,52 @@
 package com.example.demo.service;
 
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
+import java.util.Set;
 
 @Service
 public class PlanService {
 
-    private final Map<String, String> planStore = new ConcurrentHashMap<>();
+    private final RedisTemplate<String, String> redisTemplate;
 
+    public PlanService(RedisTemplate<String, String> redisTemplate) {
+        this.redisTemplate = redisTemplate;
+    }
+
+    /**
+     * Checks if a given objectId exists in Redis.
+     */
     public boolean exists(String objectId) {
-        return planStore.containsKey(objectId);
+        return Boolean.TRUE.equals(redisTemplate.hasKey(objectId));
     }
 
+    /**
+     * Saves the plan JSON using 'objectId' as the key in Redis.
+     */
     public void save(String objectId, String json) {
-        planStore.put(objectId, json);
+        redisTemplate.opsForValue().set(objectId, json);
     }
 
+    /**
+     * Retrieves the plan JSON from Redis by 'objectId'.
+     * Returns null if not found.
+     */
     public String get(String objectId) {
-        return planStore.get(objectId);
+        return redisTemplate.opsForValue().get(objectId);
     }
 
+    /**
+     * Deletes the plan by 'objectId'.
+     */
     public void delete(String objectId) {
-        planStore.remove(objectId);
+        redisTemplate.delete(objectId);
+    }
+
+    /**
+     * Returns all Redis keys (for demo/debug only).
+     */
+    public Set<String> getAllKeys() {
+        return redisTemplate.keys("*");
     }
 }

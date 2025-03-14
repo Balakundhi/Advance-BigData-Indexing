@@ -1,14 +1,13 @@
 package com.example.demo.controller;
 
 import com.example.demo.service.PlanService;
+import org.everit.json.schema.Schema;
+import org.everit.json.schema.loader.SchemaLoader;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import org.json.JSONObject;
-import org.json.JSONTokener;
-import org.everit.json.schema.Schema;
-import org.everit.json.schema.loader.SchemaLoader;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -24,146 +23,182 @@ public class PlanController {
     public PlanController(PlanService planService) {
         this.planService = planService;
 
-        // Inline our new "Fitness Plan" JSON Schema
+        // JSON Schema matching the professor's structure
         String schemaString = """
         {
           "$schema": "http://json-schema.org/draft-07/schema#",
           "type": "object",
           "properties": {
-            "planId": {
-              "type": "string"
+            "planCostShares": {
+              "type": "object",
+              "properties": {
+                "deductible": { "type": "number" },
+                "_org":       { "type": "string" },
+                "copay":      { "type": "number" },
+                "objectId":   { "type": "string" },
+                "objectType": { "type": "string" }
+              },
+              "required": ["deductible", "_org", "copay", "objectId", "objectType"],
+              "additionalProperties": false
             },
-            "planName": {
-              "type": "string"
-            },
-            "exercises": {
+            "linkedPlanServices": {
               "type": "array",
               "items": {
                 "type": "object",
                 "properties": {
-                  "exerciseName": {
-                    "type": "string"
+                  "linkedService": {
+                    "type": "object",
+                    "properties": {
+                      "_org":       { "type": "string" },
+                      "objectId":   { "type": "string" },
+                      "objectType": { "type": "string" },
+                      "name":       { "type": "string" }
+                    },
+                    "required": ["_org", "objectId", "objectType", "name"],
+                    "additionalProperties": false
                   },
-                  "durationMins": {
-                    "type": "number"
+                  "planserviceCostShares": {
+                    "type": "object",
+                    "properties": {
+                      "deductible": { "type": "number" },
+                      "_org":       { "type": "string" },
+                      "copay":      { "type": "number" },
+                      "objectId":   { "type": "string" },
+                      "objectType": { "type": "string" }
+                    },
+                    "required": ["deductible", "_org", "copay", "objectId", "objectType"],
+                    "additionalProperties": false
                   },
-                  "caloriesBurned": {
-                    "type": "number"
-                  }
+                  "_org":       { "type": "string" },
+                  "objectId":   { "type": "string" },
+                  "objectType": { "type": "string" }
                 },
-                "required": ["exerciseName", "durationMins", "caloriesBurned"],
+                "required": ["linkedService", "planserviceCostShares", "_org", "objectId", "objectType"],
                 "additionalProperties": false
               }
             },
-            "createdBy": {
-              "type": "string"
-            },
-            "creationDate": {
-              "type": "string"
-            }
+            "_org":       { "type": "string" },
+            "objectId":   { "type": "string" },
+            "objectType": { "type": "string" },
+            "planType":   { "type": "string" },
+            "creationDate": { "type": "string" }
           },
           "required": [
-            "planId",
-            "planName",
-            "exercises",
-            "createdBy",
+            "planCostShares",
+            "linkedPlanServices",
+            "_org",
+            "objectId",
+            "objectType",
+            "planType",
             "creationDate"
           ],
           "additionalProperties": false
         }
         """;
 
-        // Load and compile the schema
+        // Compile the schema
         JSONObject rawSchema = new JSONObject(new JSONTokener(schemaString));
         this.jsonSchema = SchemaLoader.load(rawSchema);
     }
 
-    // -------------------------
-    //  CREATE (POST)
-    // -------------------------
+    /**
+     * Creates a new plan using the professor's JSON structure.
+     */
     @PostMapping
     public ResponseEntity<?> createPlan(@RequestBody String planJson) {
-        // 1. Validate JSON against the new fitness schema
+        // 1. Validate JSON
         try {
             JSONObject jsonObject = new JSONObject(planJson);
-            jsonSchema.validate(jsonObject); // throws exception if invalid
+            jsonSchema.validate(jsonObject);
         } catch (Exception e) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
                     .body("Invalid request body: " + e.getMessage());
         }
 
-        // 2. Extract planId
+        // 2. Extract 'objectId' from the JSON
         JSONObject jsonObject = new JSONObject(planJson);
-        String planId = jsonObject.optString("planId", null);
-        if (planId == null || planId.isBlank()) {
+        String objectId = jsonObject.optString("objectId", null);
+        if (objectId == null || objectId.isBlank()) {
             return ResponseEntity
                     .status(HttpStatus.BAD_REQUEST)
-                    .body("Missing or empty 'planId'.");
+                    .body("Missing or empty 'objectId'.");
         }
 
-        // 3. Check if plan with this planId already exists
-        if (planService.exists(planId)) {
+        // 3. Check if a plan with this objectId already exists
+        if (planService.exists(objectId)) {
             return ResponseEntity
                     .status(HttpStatus.CONFLICT)
-                    .body("Plan with this planId already exists.");
+                    .body("A plan with objectId '" + objectId + "' already exists.");
         }
 
-        // 4. Save in memory
-        planService.save(planId, planJson);
+        // 4. Save into Redis (or in-memory, depending on PlanService)
+        planService.save(objectId, planJson);
 
-        // 5. Return 201 Created
+        // 5. Generate ETag and return 201
+        String eTag = generateETag(planJson);
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body("Fitness plan successfully created. planId = " + planId);
+                .eTag(eTag)
+                .body("Plan successfully created. objectId = " + objectId);
     }
 
-    // -------------------------
-    //  READ (GET)
-    // -------------------------
-    @GetMapping("/{planId}")
+    /**
+     * Retrieves a plan by objectId (path variable) and returns ETag for conditional GET.
+     */
+    @GetMapping("/{objectId}")
     public ResponseEntity<?> getPlan(
-            @PathVariable String planId,
+            @PathVariable String objectId,
             @RequestHeader(value = "If-None-Match", required = false) String ifNoneMatch
     ) {
         // 1. Fetch
-        String planJson = planService.get(planId);
+        String planJson = planService.get(objectId);
         if (planJson == null) {
             return ResponseEntity
                     .status(HttpStatus.NOT_FOUND)
-                    .body("Plan not found");
+                    .body("Plan not found for objectId: " + objectId);
         }
 
-        // 2. Generate ETag (MD5 hash)
+        // 2. ETag generation
         String eTag = generateETag(planJson);
 
-        // 3. Compare with If-None-Match
+        // 3. Check If-None-Match
         if (ifNoneMatch != null && ifNoneMatch.equals(eTag)) {
             return ResponseEntity.status(HttpStatus.NOT_MODIFIED).build();
         }
 
-        // 4. Return the plan with ETag
+        // 4. Return plan + ETag
         return ResponseEntity
                 .ok()
                 .eTag(eTag)
                 .body(planJson);
     }
 
-    // -------------------------
-    //  DELETE
-    // -------------------------
-    @DeleteMapping("/{planId}")
-    public ResponseEntity<?> deletePlan(@PathVariable String planId) {
-        if (!planService.exists(planId)) {
+    /**
+     * Deletes a plan by objectId.
+     */
+    @DeleteMapping("/{objectId}")
+    public ResponseEntity<?> deletePlan(@PathVariable String objectId) {
+        if (!planService.exists(objectId)) {
             return ResponseEntity
                     .status(HttpStatus.NOT_FOUND)
-                    .body("Plan not found");
+                    .body("No plan found for objectId: " + objectId);
         }
-        planService.delete(planId);
+        planService.delete(objectId);
         return ResponseEntity.noContent().build(); // 204
     }
 
-    // Helper for ETag generation
+    /**
+     * Returns all keys in Redis for debugging/demo.
+     */
+    @GetMapping("/keys")
+    public ResponseEntity<?> listAllKeys() {
+        return ResponseEntity.ok(planService.getAllKeys());
+    }
+
+    /**
+     * Helper to generate ETag (MD5 hash).
+     */
     private String generateETag(String content) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
