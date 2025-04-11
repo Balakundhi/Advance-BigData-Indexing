@@ -94,6 +94,22 @@
   <artifactId>jwks-rsa</artifactId>
   <version>0.21.1</version>
 </dependency>
+<!-- Kafka -->
+<dependency>
+    <groupId>org.springframework.kafka</groupId>
+    <artifactId>spring-kafka</artifactId>
+</dependency>
+<!-- Elasticsearch Java API client (works with 8.x & 7.x clusters) -->
+<dependency>
+    <groupId>co.elastic.clients</groupId>
+    <artifactId>elasticsearch-java</artifactId>
+    <version>8.12.2</version>
+</dependency>
+<!-- Jackson (string ⇄ json for Kafka messages) -->
+<dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-databind</artifactId>
+</dependency>
 
 
 

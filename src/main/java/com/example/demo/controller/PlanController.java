@@ -192,7 +192,7 @@ public class PlanController {
     public ResponseEntity<?> patchPlan(
         @PathVariable String objectId,
         @RequestBody String patchJson,
-        @RequestHeader(value="If-None-Match", required=false) String ifMatch,
+        @RequestHeader(value="If-Match", required=false) String ifMatch,
         @RequestHeader(value="Authorization", required=false) String authHeader
     ) {
         // 1. Token check
