@@ -28,6 +28,8 @@ public class PlanIndexer {
     /* ----- public API used by consumer ----- */
     public void indexOrUpdate(JsonNode data) throws IOException {
         String planId = data.get("objectId").asText();
+        
+        System.out.println("📦 Indexing parent plan: " + planId);
 
         // 1. root doc
         es.index(i -> i
@@ -54,6 +56,9 @@ public class PlanIndexer {
      // 2. planCostShares  ─────────────────────────────────────────────
         JsonNode pcs = data.get("planCostShares");
 
+        String pcsId = pcs.get("objectId").asText();
+        System.out.println("💰 Indexing planCostShares: " + pcsId);
+        
         Map<String,Object> pcsMap = mapper.convertValue(pcs, Map.class);
         pcsMap.put("plan_join", Map.of("name","planCostShares","parent", planId));
 
@@ -66,6 +71,7 @@ public class PlanIndexer {
         // 3. linkedPlanServices & their children
         for (JsonNode svc : data.withArray("linkedPlanServices")) {
             String lpsId = svc.get("objectId").asText();
+            System.out.println("🧩 Indexing linkedPlanService: " + lpsId);
 
             es.index(i -> i.index("plans").id(lpsId).routing(planId)
                 .document(Map.of(
@@ -83,6 +89,10 @@ public class PlanIndexer {
             
          // linkedService ─────────────────────────────────────────────────
             JsonNode ls = svc.get("linkedService");
+            
+            String lsId = ls.get("objectId").asText();
+            System.out.println("   └─🔗 linkedService: " + lsId);
+            
             Map<String,Object> lsMap = mapper.convertValue(ls, Map.class);
             lsMap.put("plan_join", Map.of("name","linkedService","parent", lpsId));
 
@@ -101,6 +111,10 @@ public class PlanIndexer {
             
          // planserviceCostShares ────────────────────────────────────────
             JsonNode lscs = svc.get("planserviceCostShares");
+            
+            String lscsId = lscs.get("objectId").asText();
+            System.out.println("   └─💸 planserviceCostShares: " + lscsId);
+            
             Map<String,Object> lscsMap = mapper.convertValue(lscs, Map.class);
             lscsMap.put("plan_join", Map.of("name","planserviceCostShares","parent", lpsId));
 

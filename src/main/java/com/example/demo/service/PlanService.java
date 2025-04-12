@@ -3,7 +3,7 @@ package com.example.demo.service;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
-import com.example.demo.kafka.PlanPublisher;
+import com.example.demo.rabbitmq.PlanMessagePublisher;
 
 import java.util.Set;
 
@@ -11,9 +11,9 @@ import java.util.Set;
 public class PlanService {
 
     private final RedisTemplate<String, String> redisTemplate;
-    private final PlanPublisher publisher;   
+    private final PlanMessagePublisher publisher; 
 
-    public PlanService(RedisTemplate<String, String> redisTemplate, PlanPublisher publisher) {
+    public PlanService(RedisTemplate<String, String> redisTemplate, PlanMessagePublisher publisher) {
         this.redisTemplate = redisTemplate;
         this.publisher = publisher;
     }

@@ -1,28 +1,31 @@
-package com.example.demo.kafka;
-
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.stereotype.Component;
+package com.example.demo.rabbitmq;
 
 import com.example.demo.elastic.PlanIndexer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.stereotype.Component;
 
 @Component
-public class KafkaPlanConsumer {
+public class PlanMessageListener {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final PlanIndexer indexer;
 
-    public KafkaPlanConsumer(PlanIndexer indexer){ this.indexer = indexer; }
+    public PlanMessageListener(PlanIndexer indexer) {
+        this.indexer = indexer;
+    }
 
-    @KafkaListener(topics = "plan_operations", groupId = "plan-indexer")
-    public void listen(String message) {
+    @RabbitListener(queues = "plan.queue")
+    public void receiveMessage(String message) {
         try {
+        	 System.out.println("🔔 Received message from RabbitMQ: " + message);
+        	 
             JsonNode root = mapper.readTree(message);
-            String op   = root.get("operation").asText();
+            String operation = root.get("operation").asText();
             JsonNode data = root.get("data");
 
-            switch (op) {
+            switch (operation) {
                 case "create":
                 case "update":
                     indexer.indexOrUpdate(data);
@@ -30,7 +33,10 @@ public class KafkaPlanConsumer {
                 case "delete":
                     indexer.cascadeDelete(data.get("objectId").asText());
                     break;
+                default:
+                    System.out.println("Unknown operation: " + operation);
             }
+
         } catch (Exception e) {
             e.printStackTrace();
         }
