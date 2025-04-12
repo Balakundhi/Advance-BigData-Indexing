@@ -141,7 +141,8 @@ public class PlanController {
         }
 
         // 5. Save
-        planService.save(objectId, planJson);
+//        planService.save(objectId, planJson);
+        planService.save(objectId, planJson, true); 
 
         // 6. ETag
         String eTag = generateETag(planJson);
@@ -240,7 +241,8 @@ public class PlanController {
         }
 
         // 6. Save
-        planService.save(objectId, merged);
+//        planService.save(objectId, merged);
+        planService.save(objectId, merged, false); 
 
         // 7. new ETag
         String newEtag = generateETag(merged);
